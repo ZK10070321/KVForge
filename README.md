@@ -2,9 +2,135 @@
 
 > Modern Decoder LLM Training and KV-Efficient Inference Framework
 
+**当前进度：Day 2 CPU 训练闭环已验证。** 文本预处理、训练与验证、checkpoint 恢复和无缓存生成全部跑通，13 项测试通过。分步操作见 [DAY2.md](DAY2.md)。
+
 KVForge 是一个基于 PyTorch 从零构建的模块化 Decoder-only 语言模型项目，目标是实现现代 Decoder 架构、增量 KV Cache，以及可复现的推理性能评测。
 
-项目目前完成 **Day 1：模型架构与正确性基线**。当前版本实现了完整的前向传播、语言模型损失、反向传播和参数更新，并通过 9 项单元测试验证关键数学性质。KV Cache、真实文本训练和性能 benchmark 将在后续阶段加入。
+项目已完成现代 Decoder 架构与样例文本训练验证。增量 KV Cache、较大语料训练及推理 benchmark 将在后续阶段加入。下文保留 Day 1 架构基线及 Day 2 实测记录。
+
+## Day 2：训练、恢复与生成闭环
+
+验证日期：2026-09-10。运行环境：Windows / CPU / FP32，注意力后端为 SDPA。
+
+### 已完成的功能
+
+- 字符级 tokenizer：先切分文本，再仅使用训练段建立词表；保存 token 张量、词表与数据指纹。
+- 训练循环：AdamW、线性 warmup、余弦学习率衰减、梯度范数裁剪，支持随机窗口与固定 batch 训练。
+- 验证日志：独立采样器选择固定验证窗口，记录 train loss、validation loss 和学习率。
+- 断点恢复：保存模型、优化器、GradScaler、配置、步数和随机状态；恢复时核对数据指纹。
+- 自回归生成：实现贪心解码、temperature 和 top-k 采样，作为 Day 3 的无缓存基线。
+- CUDA FP16 接口已实现；本次验证仅覆盖 CPU FP32，尚未进行 GPU 实测。
+
+### 实验配置
+
+使用仓库自带原创短文本 `examples/day2_sample.txt` 验证完整流程。
+
+| 配置项 | 本次取值 |
+|---|---:|
+| 训练 / 验证 token 数 | 859 / 96 |
+| 词表大小（含未知字符） | 35 |
+| 验证集未知字符数 | 0 |
+| 模型维度 / 层数 | 64 / 2 |
+| Q 头数 / KV 头数 | 4 / 2 |
+| SwiGLU 中间维度 | 176 |
+| Batch size / 序列长度 | 4 / 32 |
+| 可训练参数量 | 94,720 |
+| 正常训练总步数 / warmup | 200 / 10 |
+| 峰值 / 最低学习率 | 3e-4 / 3e-5 |
+| 验证间隔 / 验证 batch 数 | 20 / 5 |
+
+该配置用于快速验证，与下文 Day 1 默认模型规模不同。
+
+### 固定 batch：可学习性检查
+
+使用峰值学习率 0.003、warmup 5 步，重复学习同一批样本，共 100 步。
+
+| Step | Train loss | Validation loss |
+|---:|---:|---:|
+| 20 | 1.8439 | 2.6603 |
+| 40 | 0.3838 | 3.2587 |
+| 60 | 0.0940 | 3.8405 |
+| 80 | 0.0609 | 4.0366 |
+| 100 | 0.0571 | 4.0615 |
+
+训练 loss 明显下降，验证 loss 后期上升，符合固定样本过拟合现象。本实验用于验证模型能够学习，不作为泛化成绩。
+
+### 正常训练与恢复
+
+总计划 200 步，在第 100 步保存并暂停，再从 checkpoint 恢复。
+
+| 阶段 / Step | Train loss | Validation loss |
+|---|---:|---:|
+| 初始化 | — | 3.6104 |
+| 20 | 3.2348 | 3.2128 |
+| 60 | 2.9612 | 2.7631 |
+| 100（暂停） | 2.6482 | 2.5482 |
+| 恢复后、继续训练前 | — | 2.5482 |
+| 140 | 2.5080 | 2.4534 |
+| 180 | 2.5229 | 2.4169 |
+| 200 | 2.5216 | 2.4062 |
+
+暂停前与恢复后的验证 loss 均为 `2.5482325553894043`。最终 checkpoint 记录 `step=200`、`best_val=2.40616455078125`，日志连续保存 20～200 步共 10 条记录。
+
+Train loss 来自当前 batch 更新前的前向计算；validation loss 来自更新后固定抽样窗口的平均值。两者不要求同步下降。验证文本只有 96 个字符，这些结果主要验证工程链路，不代表广泛的语言泛化能力。
+
+### 复现命令
+
+在项目根目录执行；以下输出目录应当是新目录。再次从头实验请更换目录名。
+
+```powershell
+python -m unittest discover -s tests -p "test*.py" -v
+python prepare_data.py --input examples/day2_sample.txt
+
+# 固定 batch 检查。
+python train.py --out runs/day2_overfit_check --overfit --steps 100 --warmup 5 --seq-len 32 --dim 64 --layers 2 --heads 4 --kv-heads 2 --hidden-dim 176 --lr 0.003 --eval-every 20
+
+# 总计划 200 步，在第 100 步暂停。
+python train.py --out runs/day2_run_check --steps 200 --warmup 10 --seq-len 32 --dim 64 --layers 2 --heads 4 --kv-heads 2 --hidden-dim 176 --eval-every 20 --stop-after 100
+
+# 恢复原配置，继续至第 200 步。
+python train.py --resume runs/day2_run_check/last.pt --out runs/day2_run_check
+
+# 随机采样与贪心生成。
+python generate.py --checkpoint runs/day2_run_check/best.pt --prompt "The " --max-new-tokens 100 --temperature 0.8 --top-k 20
+python generate.py --checkpoint runs/day2_run_check/best.pt --prompt "The " --max-new-tokens 100 --temperature 0
+```
+
+### 生成结果与当前边界
+
+随机采样输出节选：
+
+```text
+The lsthe fooii.qCdtea sn.
+```
+
+贪心输出节选：
+
+```text
+The the the t the the the the the the the the t
+```
+
+两种路径均正常完成，但文本尚不连贯，贪心生成出现重复。短样例和小模型用于验证流程，不以语言生成质量达标为结论。
+
+当前采用字符级 tokenizer，无 EOS 停止规则；超长上下文保留最近窗口，并重置窗口内位置。KV Cache 尚未实现，因此不报告推理加速或缓存显存收益。
+
+### 测试与输出文件
+
+本次实测：
+
+```text
+Ran 13 tests in 13.356s
+
+OK
+```
+
+新增的 4 项测试覆盖字符编码往返、词表隔离与标签错位、生成边界，以及连续训练与恢复一致性。恢复测试比较同一 CPU 环境下连续 8 步与暂停后恢复至 8 步的最终权重，要求数值完全相等；不代表跨设备或混合精度的一致性保证。
+
+- `last.pt`：最近保存的训练现场，用于继续训练。
+- `best.pt`：按验证 loss 选择的最佳已保存模型。
+- `metrics.jsonl`：训练步数、训练/验证损失与学习率日志。
+
+数据和 checkpoint 按 `.gitignore` 保留在本地。
 
 ## 项目目标
 
@@ -118,7 +244,7 @@ logits=(2, 32, 4096), loss=8.3772; backward + optimizer OK
 python -m unittest discover -s tests -p "test*.py" -v
 ```
 
-Day 1 验证结果：
+当前测试命令会运行 13 项测试。以下保留 Day 1 当日的 9 项测试记录：
 
 ```text
 Ran 9 tests in 1.245s
@@ -147,9 +273,18 @@ KVForge/
 │   ├── config.py         # 模型配置与维度检查
 │   ├── layers.py         # RMSNorm、RoPE、SwiGLU
 │   ├── attention.py      # GQA、因果遮罩、Naive/SDPA
-│   └── model.py          # Transformer Block 与完整语言模型
+│   ├── model.py          # Transformer Block 与完整语言模型
+│   ├── data.py           # 字符词表、数据切分和 batch 采样
+│   └── training.py       # 学习率、验证与 checkpoint 保存
 ├── tests/
-│   └── test_day1.py      # Day 1 正确性与可学习性测试
+│   ├── test_day1.py      # Day 1 正确性与可学习性测试
+│   └── test_day2.py      # 数据、生成与恢复一致性测试
+├── examples/
+│   └── day2_sample.txt   # 原创流程检查文本
+├── prepare_data.py       # 数据准备入口
+├── train.py              # 训练与恢复入口
+├── generate.py           # 无缓存生成入口
+├── DAY2.md               # Day 2 分步复现指南
 ├── smoke.py              # 前向、反向和优化器链路检查
 ├── requirements.txt
 └── README.md
@@ -181,7 +316,7 @@ Day 1 为便于理解，在注意力计算前显式扩展 K/V 头。后续 KV Ca
 ## Roadmap
 
 - [x] **Day 1**：现代 Decoder 组件、GQA 因果注意力、完整模型与正确性测试。
-- [ ] **Day 2**：Tokenizer、文本数据管线、训练/验证划分、warmup、checkpoint 和生成样例。
+- [x] **Day 2**：字符级 Tokenizer、文本数据管线、训练/验证、warmup、checkpoint 恢复和生成样例；CPU 验证通过。
 - [ ] **Day 3**：紧凑增量 KV Cache，以及 full forward 与逐 token decode 的 logits 一致性测试。
 - [ ] **Day 4**：Cache/No-Cache、MHA/GQA、Naive/SDPA 的延迟、吞吐与缓存占用 benchmark。
 - [ ] **Day 5**：缓存预算策略、实验图表、结果分析与项目文档整理。

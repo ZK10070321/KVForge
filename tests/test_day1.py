@@ -1,5 +1,5 @@
-"""Day 1 正确性回归测试：每项检查一个具体性质，而不只验证 shape。
-
+"""
+Day 1 正确性回归测试：每项检查一个具体性质，而不只验证 shape。
 运行：python -m unittest discover -s tests -v。
 使用很小的配置，使 CPU 也能快速验证；未覆盖 CUDA 或混合精度。
 """
