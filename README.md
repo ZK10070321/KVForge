@@ -2,11 +2,49 @@
 
 > Modern Decoder LLM Training and KV-Efficient Inference Framework
 
-**当前进度：Day 2 CPU 训练闭环已验证。** 文本预处理、训练与验证、checkpoint 恢复和无缓存生成全部跑通，13 项测试通过。分步操作见 [DAY2.md](DAY2.md)。
+**当前进度：Day 3 增量 KV Cache 已实现并通过 CPU 验证。** Day 1–3 共 18 项测试通过；保留原训练接口与 checkpoint 格式。复现步骤见 [DAY3.md](DAY3.md)，训练步骤见 [DAY2.md](DAY2.md)。
 
 KVForge 是一个基于 PyTorch 从零构建的模块化 Decoder-only 语言模型项目，目标是实现现代 Decoder 架构、增量 KV Cache，以及可复现的推理性能评测。
 
-项目已完成现代 Decoder 架构与样例文本训练验证。增量 KV Cache、较大语料训练及推理 benchmark 将在后续阶段加入。下文保留 Day 1 架构基线及 Day 2 实测记录。
+项目已完成现代 Decoder 架构、样例文本训练验证和增量缓存。较大语料训练及系统性能 benchmark 尚未完成。下文保留各阶段实测记录。
+
+## Day 3：增量 KV Cache 与一致性验证
+
+验证日期：2026-09-12；本次代码验证环境：Windows / PyTorch 2.14.0+cpu / FP32。
+这不是 CUDA 实测结果，也不代表已在用户先前的 PyTorch 2.5.1 环境重新验证。
+
+### 实现内容
+
+- 新增 `kvforge/cache.py`：为每层预分配紧凑 K/V 张量 `[B,Hkv,capacity,D]`，支持容量检查、有效长度和重置；缓存不写入模型权重。
+- 注意力支持完整前向、提示词 prefill 和单 token / 多 token 增量输入；新 Q/K 使用历史长度作为 RoPE 位置偏移。
+- naive 和 SDPA 使用按绝对位置构造的因果 mask，处理新 query 与历史 key 长度不相等的情况。
+- `generate.py --use-cache` 开启缓存；默认仍可运行无缓存基线，Day 2 checkpoint 无需转换或重新训练。
+- 窗口满时重建最近上下文，保持原生成语义。此时会重新计算整个窗口，不应当作持续增量加速。
+
+### 验证结果
+
+| 检查 | 结果 |
+|---|---|
+| Day 1–3 全部回归测试 | 18 项通过 |
+| 完整前向 vs 单 token / 分块缓存 logits | naive / SDPA、MHA / GQA / MQA 均通过容差检查 |
+| 缓存后新块的因果性 | 修改未来 token 不影响较早位置 |
+| 缓存容量、重置、紧凑存储与错误调用 | 通过 |
+| Day 2 `last.pt` 贪心生成 20 / 60 个 token | 两种生成路径的 token 完全一致 |
+| CUDA 吞吐、峰值显存与加速比 | 尚未实测，留待 Day 4 |
+
+运行测试与缓存生成：
+
+```powershell
+python -m unittest discover -s tests -p "test*.py" -v
+python generate.py --checkpoint runs/day2_run_check/last.pt --prompt "The " --max-new-tokens 20 --temperature 0 --use-cache
+```
+
+去掉 `--use-cache` 可对照无缓存结果。具体步骤、接口示例和阅读顺序见 [DAY3.md](DAY3.md)。
+
+常驻缓存占用为 `2 × 层数 × batch × KV头数 × 容量 × 头维度 × 元素字节数`。
+GQA 缓存保存扩展前的 KV；计算时仍会产生扩展的临时张量，该公式不等于模型总显存。
+当前缓存限于等长、无 padding 的推理 batch，需要 `eval()` 和禁用梯度；不混用 autocast。
+缓存优化不会改善语言质量，样例模型仍可能生成重复文本。
 
 ## Day 2：训练、恢复与生成闭环
 
@@ -112,7 +150,7 @@ The the the t the the the the the the the the t
 
 两种路径均正常完成，但文本尚不连贯，贪心生成出现重复。短样例和小模型用于验证流程，不以语言生成质量达标为结论。
 
-当前采用字符级 tokenizer，无 EOS 停止规则；超长上下文保留最近窗口，并重置窗口内位置。KV Cache 尚未实现，因此不报告推理加速或缓存显存收益。
+当前采用字符级 tokenizer，无 EOS 停止规则；超长上下文保留最近窗口，并重置窗口内位置。以上是 Day 2 当日的无缓存基线；Day 3 已加入缓存，尚未报告性能收益。
 
 ### 测试与输出文件
 
@@ -244,7 +282,7 @@ logits=(2, 32, 4096), loss=8.3772; backward + optimizer OK
 python -m unittest discover -s tests -p "test*.py" -v
 ```
 
-当前测试命令会运行 13 项测试。以下保留 Day 1 当日的 9 项测试记录：
+当前测试命令会运行 18 项测试。以下保留 Day 1 当日的 9 项测试记录：
 
 ```text
 Ran 9 tests in 1.245s
@@ -317,7 +355,7 @@ Day 1 为便于理解，在注意力计算前显式扩展 K/V 头。后续 KV Ca
 
 - [x] **Day 1**：现代 Decoder 组件、GQA 因果注意力、完整模型与正确性测试。
 - [x] **Day 2**：字符级 Tokenizer、文本数据管线、训练/验证、warmup、checkpoint 恢复和生成样例；CPU 验证通过。
-- [ ] **Day 3**：紧凑增量 KV Cache，以及 full forward 与逐 token decode 的 logits 一致性测试。
+- [x] **Day 3**：紧凑增量 KV Cache，以及 full forward 与逐 token decode 的 logits 一致性测试。
 - [ ] **Day 4**：Cache/No-Cache、MHA/GQA、Naive/SDPA 的延迟、吞吐与缓存占用 benchmark。
 - [ ] **Day 5**：缓存预算策略、实验图表、结果分析与项目文档整理。
 

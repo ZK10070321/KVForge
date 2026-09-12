@@ -14,7 +14,7 @@ class CausalSelfAttention(nn.Module):
     Hkv=Hq 是 MHA,每个 Q 头都有自己的 K/V；
     1<Hkv<Hq 是 GQA，一组 Q 头共享 K/V；
     HKV=1 是 MQA，所有 Q 头共享一组 K/V
-    Day 1 不保存历史 K/V，每次调用都会重新计算整个输入序列
+    不传 cache 时计算完整序列;传 cache 时只计算新输入并复用历史 K/V
     """
     def __init__(self, config):
         super().__init__()
@@ -28,7 +28,7 @@ class CausalSelfAttention(nn.Module):
         self.out_proj = nn.Linear(config.dim, config.dim, bias=False)
         self.rope = RotaryEmbedding(config.head_dim, config.rope_theta)
 
-    def forward(self, x):
+    def forward(self, x, cache=None, layer_index=0):
         """
         :param x: x 是隐藏状态，而不是 token ID
         :return: 返回与 x 同形状的注意力输出
@@ -41,33 +41,57 @@ class CausalSelfAttention(nn.Module):
         k = self.k_proj(x).view(b, t, c.n_kv_heads, c.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(b, t, c.n_kv_heads, c.head_dim).transpose(1, 2)
         # Q/K 旋转后，点积会感知位置，V 保留作为被聚合的内容向量
-        q, k = self.rope(q), self.rope(k)
+        # 假如历史已有 5 个 token，新输入的位置从 5 开始而不是再次从 0 开始
+        start = 0 if cache is None else cache.length
+        q, k = self.rope(q, start_pos=start), self.rope(k, start_pos=start)
+        if cache is not None:
+            k, v = cache.write(layer_index, k, v)
+        # 新 query 的绝对位置是 [start, ..., start+t-1]，key 包含全部历史，位置是 [0, ..., start+t-1]
+        # 例：历史长 3、新输入长 2，start = 3、t = 2、k.size(2) = 5
+        #    得到 q_positions = [3, 4]、k_positions = [0, 1, 2, 3, 4]
+        #    None 可以增加一个长度为 1 的维度，比如 k_positions[None, :] 就把 shape[5]变为了shape[1,5]
+        #    q_positions[:, None] 就把 shape[2]变为了shape[2,1]
+        #    allowed 时，PyTorch 通过广播把每个 query 位置与每个 key 位置比较：
+        #    第1行：0 <= 3、1 <= 3、2 <= 3、3 <= 3、4 <= 3
+        #    第2行：0 <= 4、1 <= 4、2 <= 4、3 <= 4、4 <= 4
+        #    key 的绝对位置大于 query 时属于未来，必须遮挡，allowed[i,j]=False 表示该 query 看不到该 key
+        #    结果：
+        #    [[True, True, True, True, False],[True, True, True, True, True ]]
+        q_positions = torch.arange(start, start + t, device=x.device)
+        k_positions = torch.arange(k.size(2), device=x.device)
+        allowed = k_positions[None, :] <= q_positions[:, None]
         # 显式扩展 KV 头，方便观察共享关系(默认 groups=8//2=4)
         # 第 0 个 KV 头重复 4 次，第 1 个 KV 头再重复 4 次
         # repeat_interleave 与普通 repeat 的排列顺序不同，不能随意替换
-        # 这一步会扩展计算用的张量，不代表已实现显存优化,Day 3 缓存要保存
+        # 这一步仍会扩展计算用的临时张量；常驻缓存已在上方保存了
         # 扩展前的紧凑 K/V(K 已经过 RoPE)，形状 [B,Hkv,T,D]
         groups = c.n_heads // c.n_kv_heads
         k = k.repeat_interleave(groups, dim=1)
         v = v.repeat_interleave(groups, dim=1)
         if c.attention_backend == "sdpa":
             # SDPA 内部包含 1/sqrt(D) 缩放，不能在调用前再次缩放 Q
-            # 当前 Q/K 长度相等，is_causal=True 正好表示下三角可见
             # dropout_p 显式设为 0，便于与手写分支对照
             # 调用 SDPA 不保证采用 FlashAttention,具体后端取决于设备、dtype 等条件
-            out = F.scaled_dot_product_attention(q, k, v, dropout_p=0.0,is_causal=True)
+            # 为什么 is_causal=False:因为已经显式传入了正确的因果允许矩阵。
+            #                       is_causal=False 在这里不代表模型没有因果约束,因果约束由 attn_mask=allowed 提供;
+            #                       对于带历史的矩形注意力，不能直接套用左上对齐的普通下三角,需要的是按新 query 的实际位置构造的遮罩.
+            # SDPA 的 attn_mask 中 True 表示允许关注,所以传入的是 allowed，不是 future
+            out = F.scaled_dot_product_attention(
+                q, k, v, dropout_p=0.0, attn_mask=allowed, is_causal=False)
         else:
-            # [B,Hq,T,D] @ [B,Hq,D,T] -> [B,Hq,T,T]
-            # 行是 query 位置，列是 key 位置；缩放避免点积随 D 增大而过大
+            # T 是新输入长度，S 是历史加新输入的长度
+            # [B,Hq,T,D] @ [B,Hq,D,S] -> [B,Hq,T,S]
+            # 行是 query 位置，列是 key 位置，缩放避免点积随 D 增大而过大
             scores = (q @ k.transpose(-2, -1)) / math.sqrt(c.head_dim)
-            # triu(1) 只保留严格上三角的 True，即 key 位置大于 query 的未来
-            # 对角线不遮挡,模型可看当前输入 token 来预测下一个 token
-            future = torch.ones(t, t, device=x.device, dtype=torch.bool).triu(1)
-            # [T,T] mask 广播到所有 batch/head，-inf 经 softmax 后变为 0
+            # 取反后 True 表示需要遮住的未来位置
+            future = ~allowed
+            # masked_fill 的规则是:条件为 True 的位置替换成指定数值
+            # [T,S] mask 广播到所有 batch/head，-inf 经 softmax 后变为 0
+            # 把未来位置设为负无穷后，这些位置的概率就变成 0，不再参与 V 的加权汇总
             scores = scores.masked_fill(future, float("-inf"))
             # 沿 key 轴归一化，每行概率和为 1,FP32 softmax 后恢复 dtype
             weights = torch.softmax(scores.float(), dim=-1).to(q.dtype)
-            # 按注意力概率加权汇总 V：[B,Hq,T,T] @ [B,Hq,T,D]
+            # 按注意力概率加权汇总 V [B,Hq,T,S] @ [B,Hq,S,D] -> [B,Hq,T,D]
             out = weights @ v
         # 换回 [B,T,Hq,D],transpose 后内存通常不连续，contiguous 后才能安全地 view 并合并 Hq/D 轴 成 C
         # 最后应用可学习的输出投影

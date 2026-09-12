@@ -10,7 +10,7 @@ from .layers import RMSNorm, SwiGLU
 
 class TransformerBlock(nn.Module):
     """
-    Pre-Norm(前向传播) Block:归一化在子层之前，两个子层分别带残差连接
+    Pre-Norm（先归一化） Block:归一化在子层之前，两个子层分别带残差连接
     """
     def __init__(self, config):
         super().__init__()
@@ -21,10 +21,10 @@ class TransformerBlock(nn.Module):
         self.ffn_norm = RMSNorm(config.dim, config.norm_eps)
         self.ffn = SwiGLU(config.dim, config.hidden_dim)
 
-    def forward(self, x):
+    def forward(self, x, cache=None, layer_index=0):
         # 残差主分支直接传递 x，注意力分支学习需要添加的跨位置信息
         # 所有中间子层输出均为 [B,T,C]，才能与主分支逐元素相加
-        x = x + self.attention(self.attn_norm(x))
+        x = x + self.attention(self.attn_norm(x), cache=cache, layer_index=layer_index)
         # 使用更新后的 x 进入 FFN，而不是最初的输入
         # FFN 逐位置处理特征
         return x + self.ffn(self.ffn_norm(x))
@@ -68,7 +68,12 @@ class MiniLLM(nn.Module):
             # 函数名末尾的 "_" 表示 "直接修改传入张量本身"
             nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, input_ids, targets=None):
+    def create_cache(self, batch_size, capacity=None):
+        # 缓存由调用者持有，不注册为模型参数，因此旧 checkpoint 仍能直接加载
+        from .cache import KVCache
+        return KVCache(self, batch_size, capacity)
+
+    def forward(self, input_ids, targets=None, *, cache=None):
         # 先检查二维形状，Python 的 or 短路求值能避免对低维输入访问 size(1)
         if input_ids.ndim != 2 or not 0 < input_ids.size(1) <= self.config.max_seq_len:
             raise ValueError("input_ids must be [B, T], with 1 <= T <= max_seq_len")
@@ -76,10 +81,15 @@ class MiniLLM(nn.Module):
         # 等长原因:原始 token 为 [a,b,c,d],切片后 input_ids = [a,b,c],targets = [b,c,d],两者长度都为 3
         if targets is not None and targets.shape != input_ids.shape:
             raise ValueError("targets must match input_ids shape and be shifted by caller")
+        if cache is not None:
+            if targets is not None:
+                raise ValueError('KV Cache 只用于推理，不接收训练 targets')
+            cache.validate(self, input_ids)
         x = self.embedding(input_ids)
         # 每层输出保持 [B,T,C]，但其中编码的信息会逐层更新
-        for block in self.blocks:
-            x = block(x)
+        # 模型把同一个缓存交给不同层，enumerate 同时提供 layer_index：层编号、block：这一层对象
+        for layer_index, block in enumerate(self.blocks):
+            x = block(x, cache=cache, layer_index=layer_index)
         # [B,T,C] -> [B,T,V]，logits 尚未经过 softmax，不是概率而是对词表第 v 个 token 给出的预测分数
         logits = self.lm_head(self.norm(x))
         # 不提供 targets 时只计算分数，方便后续推理，当前未封装生成循环
@@ -100,6 +110,14 @@ class MiniLLM(nn.Module):
             #                故此处把 logits 转 FP32 计算损失，默认对有效目标取平均
             loss = F.cross_entropy(logits.float().reshape(-1, self.config.vocab_size), targets.reshape(-1))
         # loss.shape = [], 综合表示当前模型在这一批所有 token 位置上预测得有多差,训练的目标就是不断降低这个损失
+        if cache is not None:
+            # 所有层共用同一个起始位置，必须等全部层成功后才增加 length
+            # 如果第 0 层写完就把长度增加到 5，第1层会误以为已有 5 个历史位置，
+            # 于是：d、e 错误地使用位置5、6;写入第1层缓存位置5、6;位置3、4反而没有正确填入
+            # 不仅位置编码错误，还可能把未写入区域当成历史读取
+            # 因此每层独立保存 K/V，但同一次调用的所有层必须共享相同的历史起点
+            # 如果中途失败，length 保持不变，尚未提交的新区域不属于有效历史，再次计算时会覆盖它
+            cache.length += input_ids.size(1)
         return logits, loss
 
 
