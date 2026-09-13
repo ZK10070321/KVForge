@@ -1,4 +1,6 @@
-"""Day 3：验证缓存是否算得对，而不只是验证程序能运行。"""
+"""
+Day 3：验证缓存是否算得对，而不只是验证程序能运行
+"""
 import unittest
 import torch
 from kvforge import ModelConfig, MiniLLM
@@ -18,7 +20,10 @@ class Day3Tests(unittest.TestCase):
 
     @torch.no_grad()
     def test_full_matches_token_and_chunk_cache(self):
-        """MHA/GQA/MQA、两种后端：缓存后的每个位置都应接近完整前向。"""
+        """
+        比较一次完整输入、逐 token 输入、分成多个块输入，并覆盖 naive / SDPA 和 MHA / GQA / MQA
+        它能发现位置偏移、头扩展、缓存写入和遮罩等问题
+        """
         ids = torch.randint(1, 35, (2, 12))
         for backend in ('naive', 'sdpa'):
             for heads in (1, 2, 4):
@@ -39,7 +44,9 @@ class Day3Tests(unittest.TestCase):
 
     @torch.no_grad()
     def test_chunk_cannot_see_future(self):
-        """已有历史时，新块内部也必须遮住未来，不能让整个新块互相可见。"""
+        """
+        保留前面的 token，修改后面的 token，早位置的输出发生明显变化，说明可能看到了未来
+        """
         for backend in ('naive', 'sdpa'):
             model = self.make_model(backend)
             ids = torch.randint(1, 35, (1, 8))
@@ -55,10 +62,12 @@ class Day3Tests(unittest.TestCase):
 
     @torch.no_grad()
     def test_compact_storage_reset_and_capacity(self):
-        """常驻缓存按 KV 头保存；重置后可复用空间，越界不会推进长度。"""
+        """
+        检查缓存确实按 Hkv 保存、分配字节数符合公式、越界会报错、越界后有效长度不变、重置后新文本计算正确
+        """
         model = self.make_model()
         cache = model.create_cache(2, capacity=8)
-        # 2(K和V) × 2层 × 2样本 × 2个KV头 × 8位置 × 8头维度 × 4字节。
+        # 2(K和V) × 2层 × 2样本 × 2个KV头 × 8位置 × 8头维度 × 4字节
         self.assertEqual(cache.allocated_bytes, 2*2*2*2*8*8*4)
         self.assertEqual(tuple(cache.keys[0].shape), (2, 2, 8, 8))
         model(torch.ones(2, 8, dtype=torch.long), cache=cache)
@@ -71,7 +80,11 @@ class Day3Tests(unittest.TestCase):
         self.assertEqual(cache.length, 3)
 
     def test_invalid_usage_and_weights_unchanged(self):
-        """训练、不同模型、不同 batch 不应悄悄使用错误缓存。"""
+        """
+        检查开启梯度时拒绝缓存调用、训练模式下拒绝、其他模型不能使用该缓存、
+        batch 不一致时报错、缓存调用不接收训练 targets、创建缓存不改变 state_dict 的键集合
+        这个测试并不是完整验证所有可能的错误用法(例如不能据此声称它能自动识别同一模型对象的所有权重变更)
+        """
         model = self.make_model()
         names = set(model.state_dict())
         cache = model.create_cache(1)
@@ -93,7 +106,10 @@ class Day3Tests(unittest.TestCase):
         self.assertEqual(names, set(model.state_dict()))
 
     def test_generation_matches_and_restores_mode(self):
-        """贪心结果一致；覆盖未满窗口、越过窗口、长提示词和零生成。"""
+        """
+        检查缓存与无缓存的贪心结果一致、可以跨窗口生成、长提示词可按窗口处理、
+        生成0个token时保持输入、保留提示词前缀、返回后恢复原模型模式
+        """
         for backend in ('naive', 'sdpa'):
             model = self.make_model(backend).train()
             for prompt_length, new_tokens in ((4, 6), (14, 7), (20, 4), (4, 0)):

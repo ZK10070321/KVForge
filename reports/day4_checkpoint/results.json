@@ -1,0 +1,560 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-09-13T02:15:21.368377+00:00",
+  "environment": {
+    "torch": "2.5.1+cpu",
+    "python": "3.11.7",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "device": "cpu",
+    "dtype": "fp32",
+    "device_name": "Intel64 Family 6 Model 141 Stepping 1, GenuineIntel",
+    "cuda_runtime": null,
+    "threads": 2
+  },
+  "settings": {
+    "device": "cpu",
+    "dtype": "fp32",
+    "contexts": [
+      8,
+      16
+    ],
+    "decode_steps": 8,
+    "batch_size": 1,
+    "backends": [
+      "naive",
+      "sdpa"
+    ],
+    "kv_heads": null,
+    "dim": 128,
+    "layers": 2,
+    "heads": 4,
+    "vocab_size": 512,
+    "warmup": 2,
+    "repeats": 5,
+    "threads": 2,
+    "seed": 42,
+    "checkpoint": "runs\\day2_run_check\\last.pt",
+    "out": "runs\\day4_checkpoint_reference"
+  },
+  "model_source": "checkpoint",
+  "checkpoint_sha256": "f2124fd7dac4387907dc672637c3a533eda5744e0ee246af4d379e6f62a83ebb",
+  "method": "fixed-token replay; prefill P then N forward steps; no sampling, no window rebuild; allocation excluded from timing",
+  "results": [
+    {
+      "prompt_length": 8,
+      "decode_steps": 8,
+      "batch_size": 1,
+      "cache_capacity": 16,
+      "correctness": {
+        "max_abs_error": 4.76837158203125e-07,
+        "atol": 1e-05,
+        "rtol": 0.0001
+      },
+      "no_cache": {
+        "prefill_ms_median": 1.4019999998708954,
+        "decode_ms_median": 10.676100000182487,
+        "decode_step_ms": 1.3345125000228109,
+        "decode_tokens_per_second": 749.3373048082404,
+        "cache_allocated_bytes": 0,
+        "cuda_peak_allocated_bytes": null,
+        "cuda_peak_extra_bytes": null,
+        "samples": [
+          {
+            "prefill_seconds": 0.0013175999997656618,
+            "decode_seconds": 0.010676100000182487,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0012916000000586791,
+            "decode_seconds": 0.010432499999751599,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0015586999998049578,
+            "decode_seconds": 0.010353699999996024,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0015352000000348198,
+            "decode_seconds": 0.01179390000015701,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0014019999998708954,
+            "decode_seconds": 0.011340699999891513,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          }
+        ]
+      },
+      "cache": {
+        "prefill_ms_median": 1.5644000000065716,
+        "decode_ms_median": 10.680599999886908,
+        "decode_step_ms": 1.3350749999858635,
+        "decode_tokens_per_second": 749.0215905552785,
+        "cache_allocated_bytes": 8192,
+        "cuda_peak_allocated_bytes": null,
+        "cuda_peak_extra_bytes": null,
+        "samples": [
+          {
+            "prefill_seconds": 0.0015644000000065716,
+            "decode_seconds": 0.00997540000025765,
+            "cache_allocated_bytes": 8192,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0013568999997914943,
+            "decode_seconds": 0.010301799999979266,
+            "cache_allocated_bytes": 8192,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0013684999998986314,
+            "decode_seconds": 0.017358399999920948,
+            "cache_allocated_bytes": 8192,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0017152000000351109,
+            "decode_seconds": 0.011764400000174646,
+            "cache_allocated_bytes": 8192,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0017462999999224849,
+            "decode_seconds": 0.010680599999886908,
+            "cache_allocated_bytes": 8192,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          }
+        ]
+      },
+      "decode_speedup": 0.999578675382987,
+      "backend": "naive",
+      "kv_heads": 2,
+      "config": {
+        "vocab_size": 35,
+        "dim": 64,
+        "n_layers": 2,
+        "n_heads": 4,
+        "n_kv_heads": 2,
+        "hidden_dim": 176,
+        "max_seq_len": 32,
+        "rope_theta": 10000.0,
+        "norm_eps": 1e-06,
+        "attention_backend": "naive"
+      },
+      "parameters": 94720
+    },
+    {
+      "prompt_length": 16,
+      "decode_steps": 8,
+      "batch_size": 1,
+      "cache_capacity": 24,
+      "correctness": {
+        "max_abs_error": 9.5367431640625e-07,
+        "atol": 1e-05,
+        "rtol": 0.0001
+      },
+      "no_cache": {
+        "prefill_ms_median": 1.5582000000904372,
+        "decode_ms_median": 12.539300000298681,
+        "decode_step_ms": 1.5674125000373351,
+        "decode_tokens_per_second": 637.99414638851,
+        "cache_allocated_bytes": 0,
+        "cuda_peak_allocated_bytes": null,
+        "cuda_peak_extra_bytes": null,
+        "samples": [
+          {
+            "prefill_seconds": 0.0015748000000712636,
+            "decode_seconds": 0.012656999999762775,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0018344000000070082,
+            "decode_seconds": 0.012564299999667128,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0015582000000904372,
+            "decode_seconds": 0.012539300000298681,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.00141299999995681,
+            "decode_seconds": 0.011697999999796593,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0014184999999997672,
+            "decode_seconds": 0.011640199999874312,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          }
+        ]
+      },
+      "cache": {
+        "prefill_ms_median": 1.6123999998853833,
+        "decode_ms_median": 11.45330000008471,
+        "decode_step_ms": 1.4316625000105887,
+        "decode_tokens_per_second": 698.4886451887954,
+        "cache_allocated_bytes": 12288,
+        "cuda_peak_allocated_bytes": null,
+        "cuda_peak_extra_bytes": null,
+        "samples": [
+          {
+            "prefill_seconds": 0.0016123999998853833,
+            "decode_seconds": 0.011517700000240438,
+            "cache_allocated_bytes": 12288,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0016505999997207255,
+            "decode_seconds": 0.011554700000033336,
+            "cache_allocated_bytes": 12288,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0016666999999870313,
+            "decode_seconds": 0.01145330000008471,
+            "cache_allocated_bytes": 12288,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0015754999999444408,
+            "decode_seconds": 0.010977400000228954,
+            "cache_allocated_bytes": 12288,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0014767000002393615,
+            "decode_seconds": 0.010398399999758112,
+            "cache_allocated_bytes": 12288,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          }
+        ]
+      },
+      "decode_speedup": 1.094819833603061,
+      "backend": "naive",
+      "kv_heads": 2,
+      "config": {
+        "vocab_size": 35,
+        "dim": 64,
+        "n_layers": 2,
+        "n_heads": 4,
+        "n_kv_heads": 2,
+        "hidden_dim": 176,
+        "max_seq_len": 32,
+        "rope_theta": 10000.0,
+        "norm_eps": 1e-06,
+        "attention_backend": "naive"
+      },
+      "parameters": 94720
+    },
+    {
+      "prompt_length": 8,
+      "decode_steps": 8,
+      "batch_size": 1,
+      "cache_capacity": 16,
+      "correctness": {
+        "max_abs_error": 7.152557373046875e-07,
+        "atol": 1e-05,
+        "rtol": 0.0001
+      },
+      "no_cache": {
+        "prefill_ms_median": 1.2231000000610948,
+        "decode_ms_median": 10.183599999891157,
+        "decode_step_ms": 1.2729499999863947,
+        "decode_tokens_per_second": 785.5768097809718,
+        "cache_allocated_bytes": 0,
+        "cuda_peak_allocated_bytes": null,
+        "cuda_peak_extra_bytes": null,
+        "samples": [
+          {
+            "prefill_seconds": 0.0011813999999503721,
+            "decode_seconds": 0.009774600000127975,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.001266399999622081,
+            "decode_seconds": 0.010090799999943556,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0013493999999809603,
+            "decode_seconds": 0.010252499999751308,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0012231000000610948,
+            "decode_seconds": 0.010183599999891157,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0012068999999428343,
+            "decode_seconds": 0.01069550000011077,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          }
+        ]
+      },
+      "cache": {
+        "prefill_ms_median": 1.2912000001961133,
+        "decode_ms_median": 9.490899999946123,
+        "decode_step_ms": 1.1863624999932654,
+        "decode_tokens_per_second": 842.9126847870501,
+        "cache_allocated_bytes": 8192,
+        "cuda_peak_allocated_bytes": null,
+        "cuda_peak_extra_bytes": null,
+        "samples": [
+          {
+            "prefill_seconds": 0.001246899999841844,
+            "decode_seconds": 0.009181599999919854,
+            "cache_allocated_bytes": 8192,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0012483000000429456,
+            "decode_seconds": 0.01003660000014861,
+            "cache_allocated_bytes": 8192,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0012912000001961133,
+            "decode_seconds": 0.009498500000063359,
+            "cache_allocated_bytes": 8192,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0014599999999518332,
+            "decode_seconds": 0.009476900000208843,
+            "cache_allocated_bytes": 8192,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0013653999999405642,
+            "decode_seconds": 0.009490899999946123,
+            "cache_allocated_bytes": 8192,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          }
+        ]
+      },
+      "decode_speedup": 1.0729857020882072,
+      "backend": "sdpa",
+      "kv_heads": 2,
+      "config": {
+        "vocab_size": 35,
+        "dim": 64,
+        "n_layers": 2,
+        "n_heads": 4,
+        "n_kv_heads": 2,
+        "hidden_dim": 176,
+        "max_seq_len": 32,
+        "rope_theta": 10000.0,
+        "norm_eps": 1e-06,
+        "attention_backend": "sdpa"
+      },
+      "parameters": 94720
+    },
+    {
+      "prompt_length": 16,
+      "decode_steps": 8,
+      "batch_size": 1,
+      "cache_capacity": 24,
+      "correctness": {
+        "max_abs_error": 1.1920928955078125e-06,
+        "atol": 1e-05,
+        "rtol": 0.0001
+      },
+      "no_cache": {
+        "prefill_ms_median": 1.277700000173354,
+        "decode_ms_median": 10.749099999884493,
+        "decode_step_ms": 1.3436374999855616,
+        "decode_tokens_per_second": 744.2483556842867,
+        "cache_allocated_bytes": 0,
+        "cuda_peak_allocated_bytes": null,
+        "cuda_peak_extra_bytes": null,
+        "samples": [
+          {
+            "prefill_seconds": 0.0012346000003162771,
+            "decode_seconds": 0.010417999999845051,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0016782000002422137,
+            "decode_seconds": 0.010035500000412867,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.001199200000428391,
+            "decode_seconds": 0.010749099999884493,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.001277700000173354,
+            "decode_seconds": 0.011198299999705341,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0013353999997889332,
+            "decode_seconds": 0.011055299999952695,
+            "cache_allocated_bytes": 0,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          }
+        ]
+      },
+      "cache": {
+        "prefill_ms_median": 1.3910000002397283,
+        "decode_ms_median": 9.334899999885238,
+        "decode_step_ms": 1.1668624999856547,
+        "decode_tokens_per_second": 856.999003749194,
+        "cache_allocated_bytes": 12288,
+        "cuda_peak_allocated_bytes": null,
+        "cuda_peak_extra_bytes": null,
+        "samples": [
+          {
+            "prefill_seconds": 0.0013140999999450287,
+            "decode_seconds": 0.009286499999689113,
+            "cache_allocated_bytes": 12288,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0013127000001986744,
+            "decode_seconds": 0.013303000000178145,
+            "cache_allocated_bytes": 12288,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0013910000002397283,
+            "decode_seconds": 0.009334899999885238,
+            "cache_allocated_bytes": 12288,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.0013911999999436375,
+            "decode_seconds": 0.00928059999978359,
+            "cache_allocated_bytes": 12288,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          },
+          {
+            "prefill_seconds": 0.001564599999710481,
+            "decode_seconds": 0.009872600000107923,
+            "cache_allocated_bytes": 12288,
+            "cuda_baseline_allocated_bytes": null,
+            "cuda_peak_allocated_bytes": null,
+            "cuda_peak_extra_bytes": null
+          }
+        ]
+      },
+      "decode_speedup": 1.151495998887684,
+      "backend": "sdpa",
+      "kv_heads": 2,
+      "config": {
+        "vocab_size": 35,
+        "dim": 64,
+        "n_layers": 2,
+        "n_heads": 4,
+        "n_kv_heads": 2,
+        "hidden_dim": 176,
+        "max_seq_len": 32,
+        "rope_theta": 10000.0,
+        "norm_eps": 1e-06,
+        "attention_backend": "sdpa"
+      },
+      "parameters": 94720
+    }
+  ]
+}

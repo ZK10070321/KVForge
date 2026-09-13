@@ -1,0 +1,2 @@
+# 仅 plot_day4.py 需要；模型和 benchmark 本身仍只依赖 PyTorch。
+matplotlib>=3.7

@@ -2,11 +2,65 @@
 
 > Modern Decoder LLM Training and KV-Efficient Inference Framework
 
-**当前进度：Day 3 增量 KV Cache 已实现并通过 CPU 验证。** Day 1–3 共 18 项测试通过；保留原训练接口与 checkpoint 格式。复现步骤见 [DAY3.md](DAY3.md)，训练步骤见 [DAY2.md](DAY2.md)。
+**当前进度：Day 4 推理微基准已实现并完成 CPU 验证。** 23 项测试通过；保存18组架构/后端/长度对照及Day 2 checkpoint实测。运行与学习安排见 [DAY4.md](DAY4.md)。
 
 KVForge 是一个基于 PyTorch 从零构建的模块化 Decoder-only 语言模型项目，目标是实现现代 Decoder 架构、增量 KV Cache，以及可复现的推理性能评测。
 
-项目已完成现代 Decoder 架构、样例文本训练验证和增量缓存。较大语料训练及系统性能 benchmark 尚未完成。下文保留各阶段实测记录。
+项目已完成现代 Decoder 架构、样例文本训练、增量缓存与固定输入推理微基准。较大语料训练、CUDA性能实测及服务调度不在已验证范围内。下文保留各阶段记录。
+
+复习文档：[Day 4 问答与易错点](DAY4_REVIEW.md) · [Day 1–4 项目完整流程](PROJECT_FLOW.md)
+
+## Day 4：推理微基准与 CPU 实测
+
+验证日期：2026-09-13。Python 3.11.7 / PyTorch 2.5.1+cpu / Windows / FP32 / CPU线程数2。
+全部 **23 项回归测试通过**，包括此前模型、训练恢复、缓存测试及新增5项benchmark测试。
+
+新增代码：`benchmark.py`、`kvforge/benchmarking.py`、`plot_day4.py`、`tests/test_day4.py`。
+详细复现步骤和指标定义见 [DAY4.md](DAY4.md)，复习题见 [DAY3_REVIEW.md](DAY3_REVIEW.md)。
+
+### 测量方法
+
+- 固定 token 回放：prefill处理P个token，然后追加处理N个预先准备的token；两条路径看到相同输入。
+- 计时前比较全部位置的缓存/完整前向logits；超过窗口直接拒绝，不把重建混入增量测量。
+- 预热2轮，正式5轮，模式执行顺序交替；时间取中位数，JSON保留全部原始计时。
+- 分别报告prefill、decode总时间、每步时间与batch总吞吐；计时不含缓存申请、采样、打印和输入搬运。
+- 同一头配置的naive/SDPA使用相同权重；不同头配置的参数形状不同，没有语言质量等价的结论。
+- CUDA提供同步和PyTorch峰值allocated统计接口，但本次仅验证CPU；CPU的CUDA指标为null。
+
+### 参考实验
+
+随机权重模型：dim=128、2层、Q头4、KV头4/2/1、hidden=384、词表512、batch=1。
+提示词长度32/128/256，每组再处理16步；两种后端共18组。模型窗口272，每组缓存容量为P+16。
+以下完整列出其中 SDPA + GQA（KV头2）的三个长度：
+
+| 提示词P | 无缓存 decode tok/s | 缓存 decode tok/s | decode 加速比 | 缓存 KiB |
+|---:|---:|---:|---:|---:|
+| 32 | 617.0 | 832.9 | 1.350× | 48 |
+| 128 | 347.7 | 794.1 | 2.284× | 144 |
+| 256 | 216.3 | 734.7 | 3.396× | 272 |
+
+全18组decode加速比约1.26–3.54×，只代表该CPU、配置和固定输入微基准，不能推广为GPU或端到端服务成绩。
+这不是重新训练得到的模型质量提升。缓存KiB只统计K/V张量，不是总内存/显存。
+
+在同样P=256、容量272时，MHA/GQA/MQA的常驻缓存分别为544/272/136 KiB；比例由KV头数决定。
+另外加载Day 2真实checkpoint，在P=8/16、N=8时四组检查通过，速度比约1.00–1.15×，短上下文收益较小。
+
+- [完整CPU原始JSON](reports/day4_cpu/results.json) / [汇总CSV](reports/day4_cpu/summary.csv)
+- [Day 2 checkpoint 原始结果](reports/day4_checkpoint/results.json)
+- [Naive 图表](reports/day4_cpu/naive.png) / [SDPA 图表](reports/day4_cpu/sdpa.png)
+
+![Day 4 SDPA CPU benchmark](reports/day4_cpu/sdpa.png)
+
+### 复现
+
+```powershell
+python -m unittest discover -s tests -p "test*.py" -v
+python benchmark.py --kv-heads 4 2 1 --out runs/day4_cpu
+python plot_day4.py --input runs/day4_cpu/results.json
+```
+
+绘图缺依赖时安装 `requirements-benchmark.txt`。输出目录非空会拒绝覆盖，重新运行请更换 `--out`。
+现有 `reports/` 是此次实测快照，`runs/` 用于用户新实验，避免复现时改写参考数据。
 
 ## Day 3：增量 KV Cache 与一致性验证
 
@@ -30,7 +84,7 @@ KVForge 是一个基于 PyTorch 从零构建的模块化 Decoder-only 语言模�
 | 缓存后新块的因果性 | 修改未来 token 不影响较早位置 |
 | 缓存容量、重置、紧凑存储与错误调用 | 通过 |
 | Day 2 `last.pt` 贪心生成 20 / 60 个 token | 两种生成路径的 token 完全一致 |
-| CUDA 吞吐、峰值显存与加速比 | 尚未实测，留待 Day 4 |
+| CUDA 吞吐、峰值显存与加速比 | 尚未实测（Day 4 已提供测量入口） |
 
 运行测试与缓存生成：
 
@@ -282,7 +336,7 @@ logits=(2, 32, 4096), loss=8.3772; backward + optimizer OK
 python -m unittest discover -s tests -p "test*.py" -v
 ```
 
-当前测试命令会运行 18 项测试。以下保留 Day 1 当日的 9 项测试记录：
+当前测试命令会运行 23 项测试。以下保留 Day 1 当日的 9 项测试记录：
 
 ```text
 Ran 9 tests in 1.245s
@@ -356,7 +410,7 @@ Day 1 为便于理解，在注意力计算前显式扩展 K/V 头。后续 KV Ca
 - [x] **Day 1**：现代 Decoder 组件、GQA 因果注意力、完整模型与正确性测试。
 - [x] **Day 2**：字符级 Tokenizer、文本数据管线、训练/验证、warmup、checkpoint 恢复和生成样例；CPU 验证通过。
 - [x] **Day 3**：紧凑增量 KV Cache，以及 full forward 与逐 token decode 的 logits 一致性测试。
-- [ ] **Day 4**：Cache/No-Cache、MHA/GQA、Naive/SDPA 的延迟、吞吐与缓存占用 benchmark。
+- [x] **Day 4**：Cache/No-Cache、MHA/GQA、Naive/SDPA 的延迟、吞吐与缓存占用 benchmark。
 - [ ] **Day 5**：缓存预算策略、实验图表、结果分析与项目文档整理。
 
 ## 参考实现
