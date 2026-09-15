@@ -1,5 +1,5 @@
 """
-Day 2 数据管线：字符词表仅从训练文本建立，验证文本不参与词表学习
+Day 2 : 字符词表仅从训练文本建立，验证文本不参与词表学习
 """
 
 import hashlib
@@ -22,25 +22,19 @@ class CharTokenizer:
         # 普通实例方法的第一个参数量是 self，此处是 cls 代表类本身，可直接调用而不需要先手动实例化 tokenizer
         # set 集合数据结构对文本字符去重,sorted 进行排序,使同一份文本总是产生相同 ID 映射
         return cls(sorted(set(text)))
-    # 到此举一例：tokenizer = CharTokenizer.fit("banana"),则最终产生输出
-    #           tokenizer.chars = ["a", "b", "c"],tokenizer.stoi = {"a":1, "b":2, "c":3}
 
     @property
     def vocab_size(self):
         # 返回词表大小,len(self.chars) 是训练文本中不同字符的数量，还要加上未知字符 ID 0
-        #@property 让调用方式变成 tokenizer.vocab_size，而不是 tokenizer.vocab_size()
         return len(self.chars) + 1
 
     def encode(self, text):
-        # 逐字符遍历文本,get(key,default) 表示如果 key 在字典中就但会其 value 值，若不存在就返回 default
+        # 逐字符遍历文本,get(key,default) 表示如果 key 在字典中就返回其 value 值，若不存在就返回 default
         return [self.stoi.get(char, 0) for char in text]
 
     def decode(self, ids):
         # 解码 token ID，如果 i > 0 则使用 chars[i-1],否则使用 '�'
         # "".join(...) 把所有字符连接起来
-        # 例：chars = ["a", "b", "n"]，ids = [2, 1, 3, 0]
-        #    则先解码 2->chars[1]->b、1->chars[0]->a、3->chars[2]->n、0->�
-        #    然后 join 起来为 ["b", "a", "n", "�"]->"ban�"
         return ''.join(self.chars[i - 1] if i > 0 else '�' for i in ids)
 
 
@@ -81,11 +75,9 @@ def prepare(source, output, val_fraction=0.1):
         # 检查验证文本中有多少个字符在训练词表中
         'val_unknown': sum(char not in tokenizer.stoi for char in val_text)
     }
-    # (output / 'tokenizer.json')：在路径 ‘output/’ 下创建 'tokenizer.json',
-    # json.dumps(metadata, ensure_ascii=False, indent=2):把字典 metadata 转换成 JSON 字符串,中文等字符直接保存,使用两个空格缩进让文件易读
-    # write_text(..., encoding="utf-8"):将 JSON 字符串写入文件中并保存
+    # 保存字符表和元信息，以便加载时恢复同一ID映射。
     (output / 'tokenizer.json').write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding='utf-8')
-    # 将训练集和验证集 token 解码后转成 PyTorch 一维张量，保存为 ‘train.pt’ 和 'val.pt'
+    # 将训练集和验证集编码为 PyTorch 一维整数张量，保存为 ‘train.pt’ 和 'val.pt'
     torch.save(torch.tensor(tokenizer.encode(train_text), dtype=torch.long), output / 'train.pt')
     torch.save(torch.tensor(tokenizer.encode(val_text), dtype=torch.long), output / 'val.pt')
     # 返回元信息

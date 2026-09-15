@@ -36,7 +36,7 @@ def evaluate(model, tokens, batch_size, seq_len, batches, device):
     """
     不遍历整个验证集，而是固定随机抽取 batches 个验证 batch 计算平均 loss，这样评估速度较快，但结果是采样估计
     @torch.no_grad() 执行整个 evaluate() 时不记录自动求导图
-                    使用原因: 训练需要 forward → 保存计算图 → backward,而验证只需要计算 loss
+                    使用原因: 训练需要 forward → 保存计算图 → backward,而验证只需要计算 loss 而
                     不用 backward，因此禁用梯度可以减少内存占用和额外计算、防止误用验证结果反向传播。
     """
     # 记录模型原状态:对于每个 nn.module 的 model.training,如果当前是训练模式为 True，如果当前是评估模式则为 False

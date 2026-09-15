@@ -81,16 +81,3 @@ class SwiGLU(nn.Module):
         # SiLu(z)=z*sigmoid(z) [*是对应元素相乘，不是矩阵乘法]
         # 门控分支调制 up 分支的特征，最后一层输出必须回到 C 维
         return self.down(F.silu(self.gate(x)) * self.up(x))
-
-
-
-
-
-
-
-
-
-
-
-
-

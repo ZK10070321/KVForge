@@ -1,4 +1,6 @@
-"""Day 3：一次生成请求使用一个缓存；缓存不属于模型权重。"""
+"""
+一次生成请求使用一个缓存；缓存不属于模型权重
+"""
 import torch
 
 
@@ -36,6 +38,20 @@ class KVCache:
     def reset(self):
         # 旧数据无需清零,只有 [:length] 能被读取,后续写入会覆盖旧位置
         self.length = 0
+
+    @property
+    def next_position(self):
+        # 完整缓存没有淘汰，已保存长度就是下一个 token 的位置。
+        # Day 5 的预算缓存会覆盖此属性：位置继续增长，存储长度可以不增长。
+        return self.length
+
+    def key_positions(self, count, device):
+        # Day 3 的完整历史是连续的0..count-1；预算缓存返回保留下来的原始位置。
+        return torch.arange(count, device=device)
+
+    def commit(self, count):
+        # 所有层都完成后统一提交长度，不能在每层write时各加一次。
+        self.length += count
 
     @property
     def allocated_bytes(self):

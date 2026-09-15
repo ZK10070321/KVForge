@@ -1,6 +1,6 @@
-# KVForge：Day 1～Day 4 项目流程复习
+# 项目架构与数据流程
 
-项目有三条路径：训练让权重学习；生成使用已有权重续写；benchmark测计算开销。
+项目有四条路径：训练让权重学习；生成使用已有权重续写；benchmark测计算开销；预算评测比较质量与存储。
 生成和benchmark不更新参数，benchmark也不要求先训练一个好模型。
 
 ## 1. 总览
@@ -43,7 +43,7 @@ flowchart TD
 | kvforge/benchmarking.py | 正确性、计时与汇总 | 模型与固定ID→指标 |
 | benchmark.py | 实验组合与报告 | 参数/可选checkpoint→JSON/CSV |
 | plot_day4.py | 离线绘图 | JSON→PNG |
-| tests/test_day1～4.py | 23项回归测试 | 小案例与CLI→通过或错误信息 |
+| tests/test_day1～5.py | 30项回归测试 | 小案例与CLI→通过或错误信息 |
 
 ## 3. 数据怎样进入训练
 
@@ -135,16 +135,27 @@ decode吞吐=B×N/t；平均每步毫秒=1000t/N；加速比=t无缓存/t缓存�
 
 | 目标 | 证据 | 当前状态 |
 |---|---|---|
-| 数学与程序正确 | logits/因果/边界/恢复测试 | 23项回归通过 |
+| 数学与程序正确 | logits/因果/边界/恢复测试 | 30项回归通过 |
 | 语言质量 | 独立验证loss、任务指标 | 小样例训练链路通过，语言能力仍有限 |
 | 计算性能 | 指定配置重复计时与原始数据 | CPU固定输入评测完成，CUDA未实测 |
 
 用户本次18组CPU对照约1.285～3.707×，旧checkpoint短窗口约1.055～1.125×。
 不能用CPU成绩宣称GPU加速，不能用缓存公式代替总显存，不能用平均步时宣称线上P99。
-尚未实现高并发服务、PagedAttention或Day5缓存预算策略。
+Day 5已加入recent/sink_recent预算策略；尚未实现高并发服务或PagedAttention。
 
 ## 10. 复习时口述这条线
 
 原始文本先切分并编码→取错位输入标签→模型前向算loss→梯度与优化器更新→验证与存档→加载权重生成→缓存复用历史→固定工作量证明正确并测性能→保存原始数据和图表。
 
 先讲每一步的输入输出，再讲内部公式。无需重新训练就能复习Day4，因为默认benchmark创建随机权重小模型。
+
+## 11. Day 5预算质量评测新增分支
+
+checkpoint+匹配数据指纹→加载验证token→形成T+1窗口→full/recent/sink_recent逐token处理真实输入→在相同后缀计算NLL/PPL→JSON/CSV→质量与KV存储图。
+
+budget_cache.py区分length（保留数量）与seen_tokens（处理数量）；淘汰后用真实位置构造mask，不重做历史RoPE。
+所有层成功后commit；中途失败标记dirty，必须reset并从窗口开头重算。
+预算包含当前token，仅逐token调用，不超过模型原窗口。与generate.py满窗口重建不同。
+
+新增文件：kvforge/budget_cache.py、kvforge/budget_evaluation.py、evaluate_budget.py、plot_day5.py、tests/test_day5.py。
+当前总计30项测试通过。旧checkpoint只有16个共同评分位置，KV容量从32降到8，张量存储从16KiB降到4KiB；结果见[预算评测](budget-cache.md)，不能推广为普遍质量提升。

@@ -1,5 +1,5 @@
 """
-自回归生成：保留无缓存基线，并提供 Day 3 增量 KV Cache
+自回归生成,保留无缓存基线，并提供 Day 3 增量 KV Cache
 """
 import argparse
 import torch

@@ -23,7 +23,7 @@ class ModelConfig:
     # Key/Value 头数，2 个 KV 头分别供 4 个 Q 头共享，构成 GQA(Grouped Query Attention, 分组查询注意力)
     # 为什么 k/v 头比 Q 头小：未来生成文本时要保存历史 token 的 K/V，也就是 KV Cache
     n_kv_heads: int = 2
-    # SwiGLU 两条上投影分支的宽度，104 接近 8*C/3 并向上对齐到 64
+    # SwiGLU 两条上投影分支的宽度，704 接近 8*C/3 并向上对齐到 64
     hidden_dim: int = 704
     # 本实现允许的最长输入(是接口限制，不表示提前分配了 KV Cache)
     max_seq_len: int = 512
@@ -31,7 +31,7 @@ class ModelConfig:
     rope_theta: float = 10000.0
     # 避免除数为 0，用于数值稳定
     norm_eps: float = 1e-6
-    # navie 便于公式理解
+    # naive 便于公式理解
     # sdpa 使用 Pytorch 提供的方法把缩放、mask、softmax 和乘 V 等过程封装起来，并可能根据硬件选择更合适的实现
     # 两条路径在数学意义上非常相近
     attention_backend: str = "naive"
@@ -69,16 +69,3 @@ class ModelConfig:
         默认 256 // 8 = 32
         """
         return self.dim // self.n_heads
-
-
-
-
-
-
-
-
-
-
-
-
-

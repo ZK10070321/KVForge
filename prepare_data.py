@@ -1,5 +1,5 @@
 """
-准备本地 UTF-8 文本：python prepare_data.py --input your_text.txt
+准备本地 UTF-8 文本 python prepare_data.py --input your_text.txt
 """
 import argparse
 from kvforge.data import prepare

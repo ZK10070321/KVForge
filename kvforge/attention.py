@@ -42,23 +42,17 @@ class CausalSelfAttention(nn.Module):
         v = self.v_proj(x).view(b, t, c.n_kv_heads, c.head_dim).transpose(1, 2)
         # Q/K 旋转后，点积会感知位置，V 保留作为被聚合的内容向量
         # 假如历史已有 5 个 token，新输入的位置从 5 开始而不是再次从 0 开始
-        start = 0 if cache is None else cache.length
+        start = 0 if cache is None else cache.next_position
         q, k = self.rope(q, start_pos=start), self.rope(k, start_pos=start)
         if cache is not None:
             k, v = cache.write(layer_index, k, v)
-        # 新 query 的绝对位置是 [start, ..., start+t-1]，key 包含全部历史，位置是 [0, ..., start+t-1]
-        # 例：历史长 3、新输入长 2，start = 3、t = 2、k.size(2) = 5
-        #    得到 q_positions = [3, 4]、k_positions = [0, 1, 2, 3, 4]
-        #    None 可以增加一个长度为 1 的维度，比如 k_positions[None, :] 就把 shape[5]变为了shape[1,5]
-        #    q_positions[:, None] 就把 shape[2]变为了shape[2,1]
-        #    allowed 时，PyTorch 通过广播把每个 query 位置与每个 key 位置比较：
-        #    第1行：0 <= 3、1 <= 3、2 <= 3、3 <= 3、4 <= 3
-        #    第2行：0 <= 4、1 <= 4、2 <= 4、3 <= 4、4 <= 4
-        #    key 的绝对位置大于 query 时属于未来，必须遮挡，allowed[i,j]=False 表示该 query 看不到该 key
-        #    结果：
-        #    [[True, True, True, True, False],[True, True, True, True, True ]]
+        # 新query位于[start,start+t)，完整缓存的key从0开始。
+        # 预算淘汰后key位置可能不连续，以缓存提供的原始位置为准。
+        # 广播形成[T,S]允许矩阵：key位置 <= query位置。
         q_positions = torch.arange(start, start + t, device=x.device)
-        k_positions = torch.arange(k.size(2), device=x.device)
+        # 预算淘汰后，存储槽可能对应[0,1,7,8]，不能把它们重新编号为[0,1,2,3]。
+        k_positions = (torch.arange(k.size(2), device=x.device) if cache is None
+                       else cache.key_positions(k.size(2), x.device))
         allowed = k_positions[None, :] <= q_positions[:, None]
         # 显式扩展 KV 头，方便观察共享关系(默认 groups=8//2=4)
         # 第 0 个 KV 头重复 4 次，第 1 个 KV 头再重复 4 次
@@ -72,9 +66,7 @@ class CausalSelfAttention(nn.Module):
             # SDPA 内部包含 1/sqrt(D) 缩放，不能在调用前再次缩放 Q
             # dropout_p 显式设为 0，便于与手写分支对照
             # 调用 SDPA 不保证采用 FlashAttention,具体后端取决于设备、dtype 等条件
-            # 为什么 is_causal=False:因为已经显式传入了正确的因果允许矩阵。
-            #                       is_causal=False 在这里不代表模型没有因果约束,因果约束由 attn_mask=allowed 提供;
-            #                       对于带历史的矩形注意力，不能直接套用左上对齐的普通下三角,需要的是按新 query 的实际位置构造的遮罩.
+            # 显式mask处理带历史的矩形注意力，因果约束不依赖is_causal开关。
             # SDPA 的 attn_mask 中 True 表示允许关注,所以传入的是 allowed，不是 future
             out = F.scaled_dot_product_attention(
                 q, k, v, dropout_p=0.0, attn_mask=allowed, is_causal=False)
@@ -96,15 +88,3 @@ class CausalSelfAttention(nn.Module):
         # 换回 [B,T,Hq,D],transpose 后内存通常不连续，contiguous 后才能安全地 view 并合并 Hq/D 轴 成 C
         # 最后应用可学习的输出投影
         return self.out_proj(out.transpose(1, 2).contiguous().view(b, t, c.dim))
-
-
-
-
-
-
-
-
-
-
-
-

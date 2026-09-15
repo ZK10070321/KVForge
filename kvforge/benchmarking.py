@@ -1,5 +1,5 @@
 """
-Day 4：固定输入的推理微基准，不把文本质量和计算速度混在一起
+固定输入的推理微基准，不把文本质量和计算速度混在一起
 prefill 处理 P 个提示词；decode 再处理 N 个预先准备好的 token
 两条路径看到完全相同的前缀，不在计时区间采样、打印或搬运输入
 这里测的是模型调用的墙钟耗时，包含 Python 调度，不是纯 GPU kernel 时间
@@ -165,7 +165,7 @@ def benchmark_pair(model, ids, prompt_length, decode_steps, warmup=2, repeats=5)
         #              只让一条路径获得这个条件。
         # 但是预热不能保证完全消除波动，也不代表第一次运行的成本不存在
         # 本项目测的是预热后的表现，而非冷启动表现
-        # 此外，正确性验证本身已经执行过模型，即使设置 warmup=0 也不能声称测到纯冷启动
+        # 此外，正确性验证本身已经执行过模型，即使设置 warmup=0 也不能说测到纯冷启动
         for _ in range(warmup):
             for enabled in (False, True):
                 run_trial(model, ids, prompt_length, decode_steps, enabled)
@@ -187,7 +187,7 @@ def benchmark_pair(model, ids, prompt_length, decode_steps, warmup=2, repeats=5)
             'prompt_length': prompt_length, 'decode_steps': decode_steps,
             'batch_size': ids.size(0), 'cache_capacity': ids.size(1),
             'correctness': correctness, 'no_cache': baseline, 'cache': cached,
-            # 大于1表示缓存更快，小于1表示本次配置下缓存更慢；原样报告。
+            # 大于 1 表示缓存更快，小于 1 表示本次配置下缓存更慢，原样报告
             'decode_speedup': baseline['decode_ms_median'] / cached['decode_ms_median'],
         }
     finally:

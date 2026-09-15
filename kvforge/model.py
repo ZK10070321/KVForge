@@ -57,14 +57,11 @@ class MiniLLM(nn.Module):
 
     @staticmethod
     def _init_weights(module):
-        """
-        因为 _init_weights 不需要访问当前 MiniLLM 对象，只需要检查传入的 module ，所以写成静态辅助函数，
-        无需 self
-        """
+        """初始化线性层与词嵌入，RMSNorm保留默认的全1缩放。"""
         # 如果 module 是 Linear 或 Embedding，就执行下面的初始化
         if isinstance(module, (nn.Linear, nn.Embedding)):
             # 把权重初始化为服从正态分布的随机数，均值 mean=0.0，标准差 std=0.02
-            # 为什么不全初始化为 0:如果同一层的神经元初始状态完全相同，会得到相同的梯度，难以学习不同功能，随机初始化可以打破这种对称性
+            # 随机初始化打破神经元对称性。
             # 函数名末尾的 "_" 表示 "直接修改传入张量本身"
             nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
@@ -73,12 +70,16 @@ class MiniLLM(nn.Module):
         from .cache import KVCache
         return KVCache(self, batch_size, capacity)
 
+    def create_budget_cache(self, batch_size, capacity, policy='recent', sink_size=0):
+        # 显式创建预算缓存，不改变Day 3完整缓存的默认行为与旧checkpoint格式。
+        from .budget_cache import BudgetKVCache
+        return BudgetKVCache(self, batch_size, capacity, policy, sink_size)
+
     def forward(self, input_ids, targets=None, *, cache=None):
         # 先检查二维形状，Python 的 or 短路求值能避免对低维输入访问 size(1)
         if input_ids.ndim != 2 or not 0 < input_ids.size(1) <= self.config.max_seq_len:
             raise ValueError("input_ids must be [B, T], with 1 <= T <= max_seq_len")
         # 本接口不在内部移位，因此 targets 必须与 input_ids 等长
-        # 等长原因:原始 token 为 [a,b,c,d],切片后 input_ids = [a,b,c],targets = [b,c,d],两者长度都为 3
         if targets is not None and targets.shape != input_ids.shape:
             raise ValueError("targets must match input_ids shape and be shifted by caller")
         if cache is not None:
@@ -92,40 +93,18 @@ class MiniLLM(nn.Module):
             x = block(x, cache=cache, layer_index=layer_index)
         # [B,T,C] -> [B,T,V]，logits 尚未经过 softmax，不是概率而是对词表第 v 个 token 给出的预测分数
         logits = self.lm_head(self.norm(x))
-        # 不提供 targets 时只计算分数，方便后续推理，当前未封装生成循环
+        # targets由调用者错位；推理时不计算loss。
         loss = None
         if targets is not None:
             # 调用者传 tokens[:,:-1] 和 tokens[:,1:]，这里不能再次移位
-            # 交叉熵 F.cross_entropy 的作用: 1.把 logits 转换成概率意义上的结果;
-            #                              2.检查正确类别的预测情况;
-            #                              3.正确类别概率越高，loss 越小;正确类别概率越低，loss 越大
-            # cross_entropy 内部包含 log_softmax 进行了数值更稳定的计算，不能先手动 softmax
-            # reshape 的作用:模型输出"logits:[B,T,V]、targets:[B,T]",但
-            #               交叉熵希望看到"预测:[样本数,类别数]、目标:样本数]",所以合并 Batch 和
-            #               时间轴 T，[B*T,V] 对 [B*T]，每个位置都可看成一条分类样本,代码中的"-1"
-            #               表示"这一维由 PyTorch 根据总元素数量自动推断",例如 logits 原形状[2,3,4096]
-            #               总共有 6 个 token 位置,所以 reshape(-1,4096) → [6,4096],targets:[2,3] → [6],
-            #               于是可以把 6 个位置一起计算分类损失
-            # .float() 的作用:未来可能使用 FP16 或 BF16 训练来节省显存,计算交叉熵时转成 FP32 有助于提高数值稳定性
-            #                故此处把 logits 转 FP32 计算损失，默认对有效目标取平均
+            # logits [B,T,V]和targets [B,T]展平为交叉熵接口需要的形状。
+            # 内部已包含log_softmax；混合精度下先转FP32以提高数值稳定性。
             loss = F.cross_entropy(logits.float().reshape(-1, self.config.vocab_size), targets.reshape(-1))
         # loss.shape = [], 综合表示当前模型在这一批所有 token 位置上预测得有多差,训练的目标就是不断降低这个损失
         if cache is not None:
             # 所有层共用同一个起始位置，必须等全部层成功后才增加 length
-            # 如果第 0 层写完就把长度增加到 5，第1层会误以为已有 5 个历史位置，
-            # 于是：d、e 错误地使用位置5、6;写入第1层缓存位置5、6;位置3、4反而没有正确填入
-            # 不仅位置编码错误，还可能把未写入区域当成历史读取
-            # 因此每层独立保存 K/V，但同一次调用的所有层必须共享相同的历史起点
-            # 如果中途失败，length 保持不变，尚未提交的新区域不属于有效历史，再次计算时会覆盖它
-            cache.length += input_ids.size(1)
+            # 各层处理同一批位置，不能随层数重复增加历史长度。
+            # 完整缓存中途失败时，length不变，重试覆盖未提交区域。
+            # 预算缓存可能已移动旧数据，失败后会标记dirty，必须reset并从窗口开头重算。
+            cache.commit(input_ids.size(1))
         return logits, loss
-
-
-
-
-
-
-
-
-
-

@@ -1,5 +1,5 @@
 """
-Day 2 训练入口,把数据、模型、优化器组织起来,训练并保存模型
+训练入口,把数据、模型、优化器组织起来,训练并保存模型
 """
 import argparse
 import json
@@ -24,7 +24,7 @@ def main():
     p.add_argument('--steps', type=int, default=500)
     # 在指定全局步数暂停(0 表示不提前暂停)
     p.add_argument('--stop-after', type=int, default=0,
-                   help='在指定全局步数暂停；保留原学习率总步数，便于恢复验证')
+                   help='在指定全局步数暂停，保留原学习率总步数，便于恢复验证')
     # 每步使用多少个文本窗口、每个输入窗口包含多少个 token、模型隐藏维度
     p.add_argument('--batch-size', type=int, default=4)
     p.add_argument('--seq-len', type=int, default=128)
@@ -44,7 +44,7 @@ def main():
     p.add_argument('--eval-batches', type=int, default=5)
     # 随机种子、从哪个 checkpoint 恢复、是否反复训练同一个 batch
     p.add_argument('--seed', type=int, default=42)
-    p.add_argument('--resume', help='恢复自己生成的 last.pt；恢复时使用保存的训练设置')
+    p.add_argument('--resume', help='恢复自己生成的 last.pt，恢复时使用保存的训练设置')
     p.add_argument('--overfit', action='store_true', help='重复训练一个固定 batch，仅检查可学习性')
     # 正式解析终端参数
     args = p.parse_args()

@@ -1,6 +1,7 @@
-# Day 2：数据、训练、恢复与生成
+# 数据准备、训练与恢复
 
-先运行代码，后续再逐段学习。新增 Python 文件含中文注释。
+本文命令均在项目根目录执行。
+
 使用字符级 tokenizer：一个 Unicode 字符对应一个 token；它容易检查且不需要外部分词库。
 这与子词 BPE 不同，后续可替换。Day 2 的词表大小从文本推导，不再固定为 4096。
 
@@ -11,9 +12,9 @@ python -c "import sys,torch; print(sys.executable); print(torch.__version__); pr
 python -m unittest discover -s tests -p "test*.py" -v
 ```
 
-现有 Day 1 的 9 项测试加 Day 2 的 4 项测试，共 13 项。
+完整回归测试共 30 项。本文所有命令均在项目根目录执行。
 CPU 可以完成整条流程；只有 CUDA 可用时才添加 `--device cuda --precision fp16`。
-FP16 使用 GradScaler，梯度先还原再裁剪。默认 FP32，未自动修改你的 Python 环境。
+FP16 使用 GradScaler，梯度先还原再裁剪。默认使用 FP32。
 
 ## 2. 准备数据
 
@@ -84,5 +85,5 @@ Day 3 做严格缓存对照时需要明确位置与裁剪规则，不能把此�
 
 `kvforge/data.py → prepare_data.py → kvforge/training.py → train.py → generate.py → tests/test_day2.py`
 
-完成复现的标准：13 项测试通过；固定 batch loss 下降；正常训练有日志；checkpoint 能恢复；生成入口输出文字。
+完成复现的标准：30 项测试通过；固定 batch loss 下降；正常训练有日志；checkpoint 能恢复；生成入口输出文字。
 生成可运行不等于模型已经获得良好语言能力。CUDA 和真实语料质量需在你的训练环境进一步验证。
