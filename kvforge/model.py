@@ -57,11 +57,13 @@ class MiniLLM(nn.Module):
 
     @staticmethod
     def _init_weights(module):
-        """初始化线性层与词嵌入，RMSNorm保留默认的全1缩放。"""
+        """
+        初始化线性层与词嵌入，RMSNorm保留默认的全1缩放
+        """
         # 如果 module 是 Linear 或 Embedding，就执行下面的初始化
         if isinstance(module, (nn.Linear, nn.Embedding)):
             # 把权重初始化为服从正态分布的随机数，均值 mean=0.0，标准差 std=0.02
-            # 随机初始化打破神经元对称性。
+            # 随机初始化打破神经元对称性
             # 函数名末尾的 "_" 表示 "直接修改传入张量本身"
             nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
@@ -93,18 +95,18 @@ class MiniLLM(nn.Module):
             x = block(x, cache=cache, layer_index=layer_index)
         # [B,T,C] -> [B,T,V]，logits 尚未经过 softmax，不是概率而是对词表第 v 个 token 给出的预测分数
         logits = self.lm_head(self.norm(x))
-        # targets由调用者错位；推理时不计算loss。
+        # targets由调用者错位；推理时不计算loss
         loss = None
         if targets is not None:
             # 调用者传 tokens[:,:-1] 和 tokens[:,1:]，这里不能再次移位
-            # logits [B,T,V]和targets [B,T]展平为交叉熵接口需要的形状。
-            # 内部已包含log_softmax；混合精度下先转FP32以提高数值稳定性。
+            # logits [B,T,V]和targets [B,T]展平为交叉熵接口需要的形状
+            # 内部已包含log_softmax；混合精度下先转FP32以提高数值稳定性
             loss = F.cross_entropy(logits.float().reshape(-1, self.config.vocab_size), targets.reshape(-1))
         # loss.shape = [], 综合表示当前模型在这一批所有 token 位置上预测得有多差,训练的目标就是不断降低这个损失
         if cache is not None:
             # 所有层共用同一个起始位置，必须等全部层成功后才增加 length
-            # 各层处理同一批位置，不能随层数重复增加历史长度。
-            # 完整缓存中途失败时，length不变，重试覆盖未提交区域。
-            # 预算缓存可能已移动旧数据，失败后会标记dirty，必须reset并从窗口开头重算。
+            # 各层处理同一批位置，不能随层数重复增加历史长度
+            # 完整缓存中途失败时，length不变，重试覆盖未提交区域
+            # 预算缓存可能已移动旧数据，失败后会标记dirty，必须reset并从窗口开头重算
             cache.commit(input_ids.size(1))
         return logits, loss

@@ -14,8 +14,11 @@
 
 ## 学习笔记
 
+- [Day 1：模型基础与面试问答](learning/day1-review.md)
+- [Day 2：训练、恢复与生成问答](learning/day2-review.md)
 - [Day 3：缓存问答](learning/day3-review.md)
 - [Day 4：性能评测问答](learning/day4-review.md)
+- [Day 5：预算缓存与质量评估问答](learning/day5-review.md)
 - [项目总结与面试表述](learning/project-summary.md)
 
 [返回项目首页](../README.md) · [参考实验结果](../reports/README.md)

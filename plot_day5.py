@@ -1,4 +1,6 @@
-"""绘制共同评分位置上的质量—存储关系，不把不同文本的PPL放在一起比较。"""
+"""
+绘制共同评分位置上的质量—存储关系，不把不同文本的PPL放在一起比较
+"""
 import argparse
 import json
 from pathlib import Path

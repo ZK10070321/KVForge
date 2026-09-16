@@ -1,14 +1,17 @@
-"""Day 5质量评测：固定真实文本，比较相同预测位置的NLL和PPL。"""
+"""
+Day 5:
+质量评测：固定真实文本，比较相同预测位置的NLL和PPL
+"""
 import math
 import torch
 from torch.nn import functional as F
 
 
 def make_windows(tokens, window_length, max_windows=0):
-    """取不重叠的预测区间；相邻窗口共享一个边界token作为下一个窗口的输入。
-
-    一个窗口需要T+1个token：前T个输入，后T个作为正确答案。
-    最后不足T+1个token的部分丢弃，报告会明确窗口数与实际打分token数。
+    """
+    取不重叠的预测区间；相邻窗口共享一个边界token作为下一个窗口的输入
+    一个窗口需要T+1个token：前T个输入，后T个作为正确答案
+    最后不足T+1个token的部分丢弃，报告会明确窗口数与实际打分token数
     """
     if type(window_length) is not int or window_length < 1 or max_windows < 0:
         raise ValueError('window_length必须为正，max_windows不能为负')
@@ -22,10 +25,10 @@ def make_windows(tokens, window_length, max_windows=0):
 
 @torch.no_grad()
 def evaluate_policy(model, windows, policy='full', capacity=None, sink_size=0, score_from=0):
-    """逐token喂真实输入，不把模型预测错的token接回去，避免比较不同文本。
-
-    score_from按输入位置从0计数：24表示只打分输入位置24及以后的预测，
-    即预测窗口中token索引25及以后。所有策略必须使用同一个score_from。
+    """
+    逐token喂真实输入，不把模型预测错的token接回去，避免比较不同文本
+    score_from按输入位置从0计数：24表示只打分输入位置24及以后的预测
+    即预测窗口中token索引25及以后。所有策略必须使用同一个score_from
     """
     if windows.ndim != 2 or windows.size(0) < 1:
         raise ValueError('windows必须为非空[窗口数,T+1]')
@@ -54,10 +57,10 @@ def evaluate_policy(model, windows, policy='full', capacity=None, sink_size=0, s
             for position in range(length):
                 logits, _ = model(window[position:position+1].view(1, 1), cache=cache)
                 outputs.append(logits[0, 0].float())
-            # [T,V]对[T]；答案来自原始文本的下一位置，不能再次移动标签。
+            # [T,V]对[T]；答案来自原始文本的下一位置，不能再次移动标签
             all_logits = torch.stack(outputs)
             if policy == 'full':
-                # 完整缓存应与完整前向等价；预算策略本来就是近似，不能要求相等。
+                # 完整缓存应与完整前向等价；预算策略本来就是近似，不能要求相等
                 reference, _ = model(window[:-1].view(1, -1))
                 torch.testing.assert_close(all_logits, reference[0].float(), atol=1e-5, rtol=1e-4)
             scored = all_logits[score_from:]
@@ -81,7 +84,7 @@ def evaluate_policy(model, windows, policy='full', capacity=None, sink_size=0, s
             'kv_allocated_bytes': cache.allocated_bytes,
             'position_metadata_bytes': 0 if policy == 'full' else cache.metadata_bytes,
             'final_retained_positions': retained,
-            # 逐窗口结果便于检查差异；小样本不提供虚假的统计显著性结论。
+            # 逐窗口结果便于检查差异；小样本不提供虚假的统计显著性结论
             'window_nll': [x.double().mean().item() for x in losses],
             '_logits': torch.cat(selected_logits),
         }
@@ -90,7 +93,9 @@ def evaluate_policy(model, windows, policy='full', capacity=None, sink_size=0, s
 
 
 def compare_with_full(result, reference):
-    """补充相对指标；移除张量后返回可直接存成JSON的结果。"""
+    """
+    补充相对指标；移除张量后返回可直接存成JSON的结果
+    """
     full_logits = reference['_logits']
     logits = result['_logits']
     if logits.shape != full_logits.shape or result['scored_tokens'] != reference['scored_tokens']:
